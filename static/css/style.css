@@ -1,0 +1,240 @@
+/* === Global Reset & Base Styles === */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+  
+  :root {
+    --primary-color: #4f46e5;
+    --secondary-color: #4338ca;
+    --background-color: #f3f4f6;
+    --text-color: #111827;
+    --font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  }
+  
+  body {
+    background-color: var(--background-color);
+    color: var(--text-color);
+    font-family: var(--font-family);
+    line-height: 1.6;
+  }
+  
+  /* === Header Styles === */
+  header {
+    background-color: var(--primary-color);
+    padding: 1rem;
+    text-align: center;
+    color: white;
+  }
+  
+  header h1 {
+    margin-bottom: 0.5rem;
+  }
+  
+  header nav ul {
+    list-style: none;
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+  }
+  
+  header nav ul li a {
+    color: white;
+    text-decoration: none;
+    font-weight: bold;
+  }
+  
+  /* === Form Section Styles === */
+  .form-section {
+    background: #fff;
+    width: 400px;
+    margin: 40px auto;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  }
+  
+  .form-section h2 {
+    margin-bottom: 15px;
+    text-align: center;
+  }
+  
+  .form-section label {
+    display: block;
+    margin-top: 10px;
+    font-weight: bold;
+  }
+  
+  .form-section input[type="text"],
+  .form-section input[type="email"] {
+    width: 100%;
+    margin-top: 5px;
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+  }
+  
+  .note {
+    font-size: 0.9rem;
+    color: #666;
+    margin: 10px 0;
+  }
+  
+  .btn {
+    display: block;
+    width: 100%;
+    margin-top: 15px;
+    padding: 10px;
+    background: var(--primary-color);
+    color: #fff;
+    font-size: 1rem;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+  }
+  
+  .btn:hover {
+    background: var(--secondary-color);
+  }
+  
+  /* === Message Styling === */
+  .message {
+    margin-top: 15px;
+    text-align: center;
+    font-size: 0.95rem;
+    min-height: 20px;
+  }
+  
+  .error-message {
+    color: red;
+  }
+  
+  .success-message {
+    color: green;
+  }
+  
+  /* === Small Link Styling (e.g., Forgot Password link) === */
+  .small-link {
+    text-align: left;
+    margin-top: 10px;
+    font-size: 0.9rem;
+  }
+  
+  .small-link a {
+    color: var(--secondary-color);
+    text-decoration: none;
+  }
+  
+  .small-link a:hover {
+    text-decoration: underline;
+  }
+  
+  /* === Pattern Grid Styles === */
+  .pattern-grid {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr); /* 6 columns layout */
+    gap: 10px;
+    margin-top: 10px;
+  }
+  
+  .pattern-image {
+    width: 50px;
+    height: 50px;
+    border: 2px solid transparent;
+    border-radius: 4px;
+    cursor: pointer;
+    object-fit: cover;
+    transition: border-color 0.2s;
+  }
+  
+  .pattern-image:hover {
+    border-color: #999;
+  }
+  
+  .pattern-image.selected {
+    border-color: red;
+    opacity: 0.8;
+  }
+  
+  /* === Center Section (for Home and Dashboard) === */
+  .center-section {
+    background: #fff;
+    width: 700px;
+    margin: 40px auto;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    text-align: center;
+  }
+  
+  .center-section h2 {
+    margin-bottom: 1rem;
+  }
+  
+  /* === Hero Section for index.html (optional) === */
+  .hero {
+    text-align: center;
+    margin: 2rem auto;
+    max-width: 600px;
+    padding: 1rem;
+  }
+  
+  .hero h2 {
+    font-size: 2.5rem;
+    margin-bottom: 1rem;
+  }
+  
+  .hero p {
+    font-size: 1.2rem;
+    margin-bottom: 1.5rem;
+  }
+  
+  .hero .cta {
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+  }
+  
+  .hero .btn {
+    padding: 0.75rem 1.5rem;
+    background-color: var(--primary-color);
+    color: white;
+    text-decoration: none;
+    border-radius: 4px;
+    font-size: 1.1rem;
+    transition: background-color 0.3s;
+  }
+  
+  .hero .btn:hover {
+    background-color: var(--secondary-color);
+  }
+  
+  /* === Footer Styles === */
+  footer {
+    text-align: center;
+    padding: 1rem;
+    background-color: #ddd;
+    margin-top: 2rem;
+  }
+  
+  /* === Disabled Button Styling === */
+  button:disabled {
+    background-color: #999;
+    cursor: not-allowed;
+  }
+  
+  /* === Responsive Styles === */
+  @media (max-width: 480px) {
+    header nav ul {
+      flex-direction: column;
+    }
+    .form-section,
+    .center-section {
+      width: 90%;
+      margin: 1rem auto;
+      padding: 1rem;
+    }
+  }
+  
