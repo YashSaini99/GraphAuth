@@ -1,4 +1,4 @@
-GraphAuth – A Graphical Pattern Authentication System with Multi-Factor Security
+#GraphAuth – A Graphical Pattern Authentication System with Multi-Factor Security
 
 Optional banner image for visual appeal
 
