@@ -1,129 +1,144 @@
-#GraphAuth – A Graphical Pattern Authentication System with Multi-Factor Security
+# GraphAuth – Graphical Pattern Authentication System with Multi-Factor Security
 
-Optional banner image for visual appeal
+![GraphAuth Logo](./static/images/banner.png)  
+*Optional: Replace with your project banner or logo*
 
-Overview
-GraphAuth is a modern authentication system that replaces traditional text-based passwords with a graphical pattern-based approach. Users create their unique password by selecting a sequence from a grid of images. The system enhances security further by integrating OTP-based multi-factor authentication (MFA) and robust brute-force protection, which includes temporary account lockout and alert notifications. The project is built with a scalable Go backend, MongoDB for data storage, and a responsive web UI using HTML, CSS, and JavaScript.
 
-Features
-Graphical Pattern Authentication:
-Users register and log in by selecting a sequence from a randomized grid of 38 images. The pattern (e.g., "5-12-27-3") is captured only in memory and transmitted securely.
+## Overview
 
-Randomized Image Grid:
-Each time the page loads, the image grid is shuffled using a Fisher-Yates algorithm, reducing the risk of shoulder surfing.
+GraphAuth is a modern authentication system designed to replace traditional text-based passwords with a secure, graphical pattern-based method. Users create a unique password by selecting a sequence of images from a randomized grid. This innovative approach is further strengthened with OTP-based multi-factor authentication (MFA) and robust brute-force protection. The system is built with a scalable Go backend, MongoDB for data storage, and a responsive web UI using HTML, CSS, and JavaScript.
 
-OTP-Based Multi-Factor Authentication (MFA):
-After the pattern is verified at login, a one-time passcode (OTP) is generated (with a 5-minute validity) and sent to the user's registered email.
 
-Brute-Force Protection:
-The system tracks failed login attempts. After five consecutive failures, the account is temporarily locked for 1 minute, and an alert email is sent to the user. The login button is disabled during this period with a real-time countdown.
+## Key Features
 
-Forgot Password Functionality:
-Users who forget their graphical pattern can request a password reset by providing their username and email. A secure, time-limited reset token is sent to their email, allowing them to set a new pattern.
+- **Graphical Pattern Authentication**  
+  Users register and log in by selecting a sequence of images (from a pool of 38) arranged in a randomized grid. The selected sequence forms their unique password.
 
-Responsive & Modern UI:
-A clean, modern web interface ensures a pleasant user experience on desktops and mobile devices.
+- **Randomized Image Grid**  
+  Each time the grid is loaded, the image order is shuffled using the Fisher-Yates algorithm. This reduces the risk of shoulder surfing.
 
-How It Works
-Registration Flow
-User Input:
-The user navigates to the registration page, enters their username and email, and is presented with a randomized grid of 38 images.
-Pattern Selection:
-The user clicks on images in a desired sequence to form their graphical password. Their selections are stored only in a temporary JavaScript array.
-Submission & Storage:
-Upon submission, the selected image IDs are joined (e.g., "5-12-27-3") and sent via HTTPS to the backend.
-The backend hashes this sequence using SHA-256, generates an OTP secret for future MFA, and stores the user details in MongoDB.
-Login Flow
-User Input:
-The user goes to the login page, enters their username and email, and re-creates their graphical pattern from a randomized grid.
-Verification:
-The backend verifies the provided pattern by hashing it and comparing it to the stored hash.
-If correct, an OTP is generated and sent to the user’s email.
-Brute-Force Protection:
-Incorrect patterns increment a failure counter. After five failed attempts, the account is locked for 1 minute, with a real-time countdown disabling the login button.
-An alert email is sent to notify the user of the suspicious activity.
-OTP Verification:
-The user enters the received OTP on the OTP page.
-The backend validates the OTP, and upon success, the user is logged in and redirected to the dashboard.
-Forgot Password Flow
-Request:
-On the login page, the user can click “Forgot Password?” and then enter their username and email.
-Reset Process:
-The backend generates a secure reset token with a 1-hour expiry and sends a reset link to the user’s email.
-The user clicks the link and is prompted to create a new graphical pattern, which updates their stored password.
-Dashboard & Feedback
-Dashboard:
-Once logged in, the user is redirected to a dashboard that displays detailed project information, including features and security measures.
-Real-Time Feedback:
-Users receive immediate feedback for actions (successful registration, login errors, OTP verification, lockout countdown, etc.), enhancing the overall user experience.
-Technical Details
-Backend:
+- **OTP-Based Multi-Factor Authentication (MFA)**  
+  Upon successful pattern verification during login, a one-time passcode (OTP) is sent to the user’s registered email. This OTP (valid for 5 minutes) must be entered to complete the login process.
 
-Written in Go (Golang) using Gorilla Mux for RESTful routing.
-MongoDB is used for data storage, with user details including username, email, hashed pattern, OTP secret, failed attempts, and lockout timestamps.
-OTPs are generated using TOTP with a 5-minute validity period.
-Brute-force protection includes tracking of failed login attempts, temporary account lockout, and alert email notifications.
-SMTP settings are loaded from environment variables using godotenv.
-Frontend:
+- **Brute-Force Protection**  
+  The system tracks failed login attempts. After five consecutive failures, the account is temporarily locked for 1 minute. A real-time countdown is displayed on the UI, and an alert email is sent to notify the user.
 
-Built with HTML, CSS, and vanilla JavaScript.
-A dynamic, randomized image grid is generated on the registration and login pages for pattern selection.
-Real-time UI elements, including a lockout countdown and error/success messages, enhance user interaction.
-Installation & Setup
-Clone the Repository:
+- **Password Reset**  
+  Users who forget their graphical pattern can request a password reset. A secure reset token is emailed to them, allowing them to set a new graphical password.
 
-bash
-Copy
-Edit
-git clone <repository-url>
-cd graphauth
-Install Dependencies: Ensure you have Go (version 1.18+) installed, then run:
+- **Responsive & Modern UI**  
+  A clean, user-friendly web interface is provided for all interactions, including registration, login, OTP verification, and password reset. Real-time feedback and dynamic elements enhance the overall user experience.
 
-bash
-Copy
-Edit
-go mod tidy
-Configure Environment Variables: Create a .env file in the project root with:
 
-dotenv
-Copy
-Edit
-# MongoDB Configuration
-MONGO_URI=mongodb://localhost:27017
-MONGO_DB=graphauth
+## Workflow
 
-# SMTP Configuration for sending emails
-SMTP_SERVER=smtp.gmail.com:587
-SMTP_USER=your_email@gmail.com
-SMTP_PASSWORD=your_app_password
-Replace your_app_password with your SMTP provider’s app password.
+1. **Registration:**
+   - The user enters their username and email.
+   - A randomized grid of 38 images is displayed.
+   - The user selects images in their chosen order to create a pattern.
+   - The selected sequence is combined into a string (e.g., `5-12-27-3`), hashed (using SHA-256), and stored in the database along with an OTP secret.
+   
+2. **Login:**
+   - The user enters their username and email on the login page.
+   - They replicate their previously selected image sequence from a newly randomized grid.
+   - The backend verifies the hashed pattern. If correct, an OTP is generated and sent to the user’s email.
+   - If the pattern is wrong, the failed attempt counter is incremented; after five failures, the account is locked for 1 minute and an alert email is sent.
 
-Run the Application:
+3. **OTP Verification:**
+   - The user receives an OTP (valid for 5 minutes) via email.
+   - The user enters the OTP on the OTP page.
+   - Upon successful validation, the user is redirected to the dashboard.
 
-bash
-Copy
-Edit
-go run main.go
-The application will run on http://localhost:8080.
+4. **Forgot Password:**
+   - The user provides their username and email.
+   - A secure reset token is generated and sent to their email.
+   - The user clicks the reset link and sets a new graphical pattern.
 
-Access the Application:
+5. **Dashboard:**
+   - After successful login, the dashboard displays detailed project information, showcasing key features, security measures, and design decisions.
 
-Open your browser and navigate to http://localhost:8080 to view the home page.
-Use the registration page to sign up and the login page to authenticate and receive an OTP.
-Usage
-Register:
-Enter your details and select a graphical pattern from the randomized grid.
-Your pattern is securely hashed and stored.
-Login:
-Reproduce your pattern on the login page. If the pattern is correct, you’ll receive an OTP via email.
-OTP Verification:
-Enter the OTP on the provided page to complete your login.
-Forgot Password:
-If needed, request a password reset by providing your username and email to receive a reset link.
-Future Enhancements
-Enhanced UI/UX:
-Future iterations might use React with Material UI or Shadcn UI for a richer user experience.
-Additional MFA Options:
-Expanding MFA options, such as SMS-based OTPs or biometric integration.
-Advanced Session Management:
-Implementing JWT-based session management and improved monitoring for login attempts.
+
+## Technologies Used
+
+- **Backend:**  
+  - **Go (Golang)** with Gorilla Mux for RESTful API routing  
+  - **MongoDB** for data storage  
+  - **SMTP** for sending OTP and alert emails  
+  - **pquerna/otp** for TOTP-based OTP generation
+
+- **Frontend:**  
+  - **HTML**, **CSS**, and **Vanilla JavaScript**  
+  - Responsive layout using CSS Grid and Flexbox  
+  - Custom styling with CSS variables
+
+
+## Installation & Setup
+
+1. **Clone the Repository:**  
+   ```bash
+   git clone https://github.com/yourusername/your-private-repo.git
+   cd graphauth
+   ```
+2. **Install Dependencies:**
+      Make sure you have Go (v1.18 or later) installed, then run:
+  
+   ```bash
+   go mod tidy
+   ```
+3. **Configure Environment Variables:**
+      Create a `.env` file in the project root with:
+
+    ```dotenv
+
+      # MongoDB Configuration
+      MONGO_URI=mongodb://localhost:27017
+      MONGO_DB=graphauth
+
+      # SMTP Configuration for sending emails
+      SMTP_SERVER=smtp.gmail.com:587
+      SMTP_USER=your_email@gmail.com
+      SMTP_PASSWORD=your_app_password
+    ```
+   Replace your_app_password with your SMTP provider’s app password.
+
+4. **Run the Application:**
+
+    ```bash
+      go run main.go
+    ```
+    Your application will run on http://localhost:8080.
+
+5. **Access the Application:**
+
+    Navigate to http://localhost:8080 to view the home page.
+    Register a new account, log in using your graphical pattern, and complete OTP verification.
+
+## Usage
+
+- **Registration:**  
+  Enter your username and email, select your graphical pattern by clicking on images from the grid, and submit the form. Your selected sequence is securely hashed and stored.
+
+- **Login:**  
+  Reproduce your graphical pattern on a randomized grid. If the pattern is correct, an OTP is sent to your registered email. The UI displays real-time feedback, including a countdown if your account is locked due to too many failed attempts.
+
+- **OTP Verification:**  
+  Enter the OTP on the OTP verification page to complete your login and access the dashboard.
+
+- **Forgot Password:**  
+  Request a password reset by entering your username and email. Follow the reset link sent to your email to set a new graphical pattern.
+
+## Future Enhancements
+
+- **UI/UX Improvements:**  
+  Consider integrating modern frontend frameworks (e.g., React with Material UI or Shadcn UI) for an even more polished interface.
+
+- **Additional MFA Options:**  
+  Explore SMS-based OTP, biometric authentication, or other multi-factor methods.
+
+- **Advanced Session Management:**  
+  Implement JWT-based session management and enhanced logging/monitoring for improved security and user management.
+
+- **Scalability & Cloud Deployment:**  
+  Containerize the application using Docker and deploy it to a cloud platform for greater scalability and production readiness.
+
+
