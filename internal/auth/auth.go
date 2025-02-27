@@ -3,9 +3,7 @@ package auth
 import (
 	"context"
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/base64"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"log"
@@ -22,6 +20,7 @@ import (
 	"github.com/pquerna/otp/totp"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
+	"golang.org/x/crypto/bcrypt"
 )
 
 var (
@@ -33,7 +32,7 @@ var (
 func Init(ctx context.Context) error {
 	client, err := database.ConnectMongoDB(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to connect to MongoDB: %v", err)
+		return fmt.Errorf("failed to connect to MongoDB: %w", err)
 	}
 	mongoClient = client
 	userCol = database.GetUserCollection(client)
@@ -45,21 +44,34 @@ func Disconnect(ctx context.Context) error {
 	if mongoClient == nil {
 		return nil
 	}
-	return mongoClient.Disconnect(ctx)
+	if err := mongoClient.Disconnect(ctx); err != nil {
+		return fmt.Errorf("failed to disconnect from MongoDB: %w", err)
+	}
+	return nil
 }
 
-// hashPattern computes the SHA-256 hash of the provided pattern.
-func hashPattern(pattern string) string {
-	h := sha256.New()
-	h.Write([]byte(pattern))
-	return hex.EncodeToString(h.Sum(nil))
+// hashPattern hashes the provided pattern using bcrypt.
+func hashPattern(pattern string) (string, error) {
+	hash, err := bcrypt.GenerateFromPassword([]byte(pattern), bcrypt.DefaultCost)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate bcrypt hash: %w", err)
+	}
+	return string(hash), nil
+}
+
+// comparePatternHash compares the provided pattern with the stored bcrypt hash.
+func comparePatternHash(pattern, hash string) error {
+	if err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(pattern)); err != nil {
+		return err
+	}
+	return nil
 }
 
 // generateResetToken creates a secure random token for password reset.
 func generateResetToken() (string, error) {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to generate random bytes: %w", err)
 	}
 	return base64.URLEncoding.EncodeToString(b), nil
 }
@@ -68,19 +80,19 @@ func generateResetToken() (string, error) {
 func GetUserEmail(username string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+
 	var user models.User
-	err := userCol.FindOne(ctx, bson.M{"username": username}).Decode(&user)
-	if err != nil {
-		if err == mongo.ErrNoDocuments {
+	if err := userCol.FindOne(ctx, bson.M{"username": username}).Decode(&user); err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
 			return "", errors.New("user not found")
 		}
-		return "", fmt.Errorf("error retrieving user: %v", err)
+		return "", fmt.Errorf("error retrieving user: %w", err)
 	}
 	return user.Email, nil
 }
 
 // RegisterUser registers a new user by validating email, checking duplicates,
-// hashing the pattern, generating an OTP secret, and storing the record.
+// hashing the pattern with bcrypt, generating an OTP secret, and storing the record.
 func RegisterUser(username, email, pattern string) error {
 	if !util.ValidateEmail(email) {
 		return errors.New("invalid email format")
@@ -88,13 +100,17 @@ func RegisterUser(username, email, pattern string) error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+
 	var existing models.User
-	err := userCol.FindOne(ctx, bson.M{"username": username}).Decode(&existing)
-	if err == nil {
+	if err := userCol.FindOne(ctx, bson.M{"username": username}).Decode(&existing); err == nil {
 		return errors.New("user already exists")
+	} else if err != mongo.ErrNoDocuments {
+		return fmt.Errorf("error checking existing user: %w", err)
 	}
-	if err != mongo.ErrNoDocuments {
-		return fmt.Errorf("error checking existing user: %v", err)
+
+	hashedPattern, err := hashPattern(pattern)
+	if err != nil {
+		return fmt.Errorf("error hashing pattern: %w", err)
 	}
 
 	otpKey, err := totp.Generate(totp.GenerateOpts{
@@ -102,39 +118,37 @@ func RegisterUser(username, email, pattern string) error {
 		AccountName: username,
 	})
 	if err != nil {
-		return fmt.Errorf("error generating OTP secret: %v", err)
+		return fmt.Errorf("error generating OTP secret: %w", err)
 	}
 
 	newUser := models.User{
 		Username:       username,
 		Email:          email,
-		PatternHash:    hashPattern(pattern),
+		PatternHash:    hashedPattern,
 		OTPSecret:      otpKey.Secret(),
 		FailedAttempts: 0,
 	}
-	ctxInsert, cancelInsert := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancelInsert()
-	_, err = userCol.InsertOne(ctxInsert, newUser)
-	if err != nil {
-		return fmt.Errorf("error inserting user: %v", err)
+
+	if _, err := userCol.InsertOne(ctx, newUser); err != nil {
+		return fmt.Errorf("error inserting user: %w", err)
 	}
 	log.Printf("User %s registered successfully.", username)
 	return nil
 }
 
-// VerifyPattern checks if the provided pattern matches the stored hash.
-// On a wrong pattern, it increments the failed attempts counter.
+// VerifyPattern checks if the provided pattern matches the stored bcrypt hash.
+// On an incorrect pattern, it increments the failed attempts counter.
 // After 5 failed attempts, it locks the account for 1 minute and sends an alert email.
 func VerifyPattern(username, pattern string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+
 	var user models.User
-	err := userCol.FindOne(ctx, bson.M{"username": username}).Decode(&user)
-	if err != nil {
-		if err == mongo.ErrNoDocuments {
+	if err := userCol.FindOne(ctx, bson.M{"username": username}).Decode(&user); err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
 			return errors.New("user not found")
 		}
-		return fmt.Errorf("error retrieving user: %v", err)
+		return fmt.Errorf("error retrieving user: %w", err)
 	}
 
 	// Check if account is locked.
@@ -142,39 +156,28 @@ func VerifyPattern(username, pattern string) error {
 		return fmt.Errorf("account is temporarily locked until %s", user.LockUntil.Format(time.RFC1123))
 	}
 
-	// Compare pattern hash.
-	if hashPattern(pattern) != user.PatternHash {
+	// Compare pattern hash using bcrypt.
+	if err := comparePatternHash(pattern, user.PatternHash); err != nil {
 		newAttempts := user.FailedAttempts + 1
-		update := bson.M{
-			"$set": bson.M{"failed_attempts": newAttempts},
-		}
-		// If 5 or more failed attempts, lock the account for 1 minute.
+		update := bson.M{"$set": bson.M{"failed_attempts": newAttempts}}
 		if newAttempts >= 5 {
 			lockTime := time.Now().Add(1 * time.Minute)
 			update["$set"].(bson.M)["lock_until"] = lockTime
-			// Send an alert email in a separate goroutine.
 			go func() {
 				if err := SendAlertEmail(username, lockTime); err != nil {
 					log.Printf("Failed to send alert email: %v", err)
 				}
 			}()
 		}
-		ctxUpdate, cancelUpdate := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancelUpdate()
-		if _, err := userCol.UpdateOne(ctxUpdate, bson.M{"username": username}, update); err != nil {
+		if _, err := userCol.UpdateOne(ctx, bson.M{"username": username}, update); err != nil {
 			log.Printf("Error updating failed attempts: %v", err)
 		}
 		return errors.New("incorrect pattern")
 	}
 
-	// Pattern is correct: reset failed attempts and clear lock.
-	update := bson.M{
-		"$set":   bson.M{"failed_attempts": 0},
-		"$unset": bson.M{"lock_until": ""},
-	}
-	ctxUpdate, cancelUpdate := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancelUpdate()
-	if _, err := userCol.UpdateOne(ctxUpdate, bson.M{"username": username}, update); err != nil {
+	// If pattern is correct, reset failed attempts and clear lock.
+	update := bson.M{"$set": bson.M{"failed_attempts": 0}, "$unset": bson.M{"lock_until": ""}}
+	if _, err := userCol.UpdateOne(ctx, bson.M{"username": username}, update); err != nil {
 		log.Printf("Error resetting failed attempts: %v", err)
 	}
 	return nil
@@ -184,13 +187,13 @@ func VerifyPattern(username, pattern string) error {
 func VerifyOTP(username, code string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+
 	var user models.User
-	err := userCol.FindOne(ctx, bson.M{"username": username}).Decode(&user)
-	if err != nil {
-		if err == mongo.ErrNoDocuments {
+	if err := userCol.FindOne(ctx, bson.M{"username": username}).Decode(&user); err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
 			return errors.New("user not found")
 		}
-		return fmt.Errorf("error retrieving user: %v", err)
+		return fmt.Errorf("error retrieving user: %w", err)
 	}
 
 	opts := totp.ValidateOpts{
@@ -201,7 +204,7 @@ func VerifyOTP(username, code string) error {
 	}
 	valid, err := totp.ValidateCustom(code, user.OTPSecret, time.Now(), opts)
 	if err != nil {
-		return fmt.Errorf("error validating OTP: %v", err)
+		return fmt.Errorf("error validating OTP: %w", err)
 	}
 	if !valid {
 		return errors.New("invalid OTP")
@@ -214,38 +217,36 @@ func VerifyOTP(username, code string) error {
 func ForgotPassword(username string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+
 	var user models.User
-	err := userCol.FindOne(ctx, bson.M{"username": username}).Decode(&user)
-	if err != nil {
-		if err == mongo.ErrNoDocuments {
+	if err := userCol.FindOne(ctx, bson.M{"username": username}).Decode(&user); err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
 			return errors.New("user not found")
 		}
-		return fmt.Errorf("error retrieving user: %v", err)
+		return fmt.Errorf("error retrieving user: %w", err)
 	}
 
 	token, err := generateResetToken()
 	if err != nil {
-		return fmt.Errorf("failed to generate reset token: %v", err)
+		return fmt.Errorf("failed to generate reset token: %w", err)
 	}
 	expiry := time.Now().Add(1 * time.Hour)
 
-	filter := bson.M{"username": username}
 	update := bson.M{
 		"$set": bson.M{
 			"reset_token":        token,
 			"reset_token_expiry": expiry,
 		},
 	}
-	_, err = userCol.UpdateOne(ctx, filter, update)
-	if err != nil {
-		return fmt.Errorf("failed to update reset token: %v", err)
+	if _, err := userCol.UpdateOne(ctx, bson.M{"username": username}, update); err != nil {
+		return fmt.Errorf("failed to update reset token: %w", err)
 	}
 
 	subject := "GraphAuth Password Reset Request"
 	resetLink := fmt.Sprintf("https://yourdomain.com/reset-password?username=%s&token=%s", username, token)
 	body := fmt.Sprintf("Dear %s,\n\nPlease use the following link to reset your graphical pattern:\n%s\n\nThis link will expire in 1 hour.\n\nRegards,\nGraphAuth Team", username, resetLink)
 	if err := sendEmail(user.Email, subject, body); err != nil {
-		return fmt.Errorf("failed to send reset email: %v", err)
+		return fmt.Errorf("failed to send reset email: %w", err)
 	}
 	log.Printf("Password reset email sent to %s", user.Email)
 	return nil
@@ -255,29 +256,32 @@ func ForgotPassword(username string) error {
 func ResetPassword(username, token, newPattern string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+
 	var user models.User
-	err := userCol.FindOne(ctx, bson.M{"username": username}).Decode(&user)
-	if err != nil {
-		if err == mongo.ErrNoDocuments {
+	if err := userCol.FindOne(ctx, bson.M{"username": username}).Decode(&user); err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
 			return errors.New("user not found")
 		}
-		return fmt.Errorf("error retrieving user: %v", err)
+		return fmt.Errorf("error retrieving user: %w", err)
 	}
 	if user.ResetToken != token || time.Now().After(user.ResetTokenExpiry) {
 		return errors.New("invalid or expired reset token")
 	}
-	newHash := hashPattern(newPattern)
-	filter := bson.M{"username": username}
+
+	hashedPattern, err := hashPattern(newPattern)
+	if err != nil {
+		return fmt.Errorf("failed to hash new pattern: %w", err)
+	}
+
 	update := bson.M{
-		"$set": bson.M{"pattern_hash": newHash},
+		"$set": bson.M{"pattern_hash": hashedPattern},
 		"$unset": bson.M{
 			"reset_token":        "",
 			"reset_token_expiry": "",
 		},
 	}
-	_, err = userCol.UpdateOne(ctx, filter, update)
-	if err != nil {
-		return fmt.Errorf("failed to update new pattern: %v", err)
+	if _, err := userCol.UpdateOne(ctx, bson.M{"username": username}, update); err != nil {
+		return fmt.Errorf("failed to update new pattern: %w", err)
 	}
 	log.Printf("Password for user %s reset successfully.", username)
 	return nil
@@ -290,12 +294,12 @@ func sendEmail(recipient, subject, body string) error {
 	smtpPassword := os.Getenv("SMTP_PASSWORD")
 
 	if smtpServer == "" || smtpUser == "" || smtpPassword == "" {
-		return fmt.Errorf("SMTP environment variables are not set")
+		return errors.New("SMTP environment variables are not set")
 	}
 
 	host, port, err := net.SplitHostPort(smtpServer)
 	if err != nil {
-		return fmt.Errorf("invalid SMTP_SERVER format (expected host:port): %v", err)
+		return fmt.Errorf("invalid SMTP_SERVER format (expected host:port): %w", err)
 	}
 
 	auth := smtp.PlainAuth("", smtpUser, smtpPassword, host)
@@ -304,9 +308,8 @@ func sendEmail(recipient, subject, body string) error {
 		"Subject: " + subject + "\r\n\r\n" +
 		body + "\r\n")
 
-	err = smtp.SendMail(smtpServer, auth, smtpUser, []string{recipient}, msg)
-	if err != nil {
-		return fmt.Errorf("failed to send email via %s:%s - %v", host, port, err)
+	if err := smtp.SendMail(smtpServer, auth, smtpUser, []string{recipient}, msg); err != nil {
+		return fmt.Errorf("failed to send email via %s:%s - %w", host, port, err)
 	}
 	return nil
 }
@@ -317,12 +320,11 @@ func SendOTPEmail(username string) error {
 	defer cancel()
 
 	var user models.User
-	err := userCol.FindOne(ctx, bson.M{"username": username}).Decode(&user)
-	if err != nil {
-		if err == mongo.ErrNoDocuments {
+	if err := userCol.FindOne(ctx, bson.M{"username": username}).Decode(&user); err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
 			return errors.New("user not found")
 		}
-		return fmt.Errorf("error retrieving user: %v", err)
+		return fmt.Errorf("error retrieving user: %w", err)
 	}
 
 	opts := totp.ValidateOpts{
@@ -333,14 +335,13 @@ func SendOTPEmail(username string) error {
 	}
 	code, err := totp.GenerateCodeCustom(user.OTPSecret, time.Now(), opts)
 	if err != nil {
-		return fmt.Errorf("failed to generate OTP code: %v", err)
+		return fmt.Errorf("failed to generate OTP code: %w", err)
 	}
 
 	subject := "Your OTP Code"
 	body := fmt.Sprintf("Dear %s,\n\nYour OTP code is: %s\nIt is valid for 5 minutes.\n\nRegards,\nGraphAuth Team", username, code)
-
 	if err := sendEmail(user.Email, subject, body); err != nil {
-		return fmt.Errorf("failed to send OTP email: %v", err)
+		return fmt.Errorf("failed to send OTP email: %w", err)
 	}
 	log.Printf("OTP email sent to %s", user.Email)
 	return nil
@@ -350,12 +351,15 @@ func SendOTPEmail(username string) error {
 func SendAlertEmail(username string, lockTime time.Time) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+
 	var user models.User
-	err := userCol.FindOne(ctx, bson.M{"username": username}).Decode(&user)
-	if err != nil {
-		return fmt.Errorf("error retrieving user for alert: %v", err)
+	if err := userCol.FindOne(ctx, bson.M{"username": username}).Decode(&user); err != nil {
+		return fmt.Errorf("error retrieving user for alert: %w", err)
 	}
 	subject := "Alert: Suspicious Login Attempts Detected"
 	body := fmt.Sprintf("Dear %s,\n\nMultiple failed login attempts have been detected on your account. Your account has been temporarily locked until %s for security reasons.\n\nIf this wasn't you, please secure your account immediately.\n\nRegards,\nGraphAuth Team", username, lockTime.Format(time.RFC1123))
-	return sendEmail(user.Email, subject, body)
+	if err := sendEmail(user.Email, subject, body); err != nil {
+		return fmt.Errorf("failed to send alert email: %w", err)
+	}
+	return nil
 }
