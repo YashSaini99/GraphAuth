@@ -1,3 +1,5 @@
+//core logic for the project
+
 package auth
 
 import (
