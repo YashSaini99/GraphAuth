@@ -36,7 +36,7 @@ GraphAuth is a modern authentication system designed to replace traditional text
    - The user enters their username and email.
    - A randomized grid of 38 images is displayed.
    - The user selects images in their chosen order to create a pattern.
-   - The selected sequence is combined into a string (e.g., `5-12-27-3`), hashed (using Bycrypt), and stored in the database along with an OTP secret.
+   - The selected sequence is combined into a string (e.g., `5-12-27-3`), hashed (using Bcrypt), and stored in the database along with an OTP secret.
    
 2. **Login:**
    - The user enters their username and email on the login page.
