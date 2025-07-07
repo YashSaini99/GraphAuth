@@ -1,7 +1,7 @@
 # GraphAuth – Graphical Pattern Authentication System with Multi-Factor Security
 
-![GraphAuth Logo](./static/images/banner.png)  
-*Optional: Replace with your project banner or logo*
+![GraphAuth Logo](./Screenshot.png)  
+
 
 
 ## Overview
