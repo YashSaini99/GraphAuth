@@ -76,7 +76,7 @@ GraphAuth is a modern authentication system designed to replace traditional text
 
 1. **Clone the Repository:**  
    ```bash
-   git clone https://github.com/YashSaini99 /GraphAuth.git
+   git clone https://github.com/YashSaini99/GraphAuth.git
    cd graphauth
    ```
 2. **Install Dependencies:**
